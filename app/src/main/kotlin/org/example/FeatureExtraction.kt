@@ -18,17 +18,17 @@ import com.github.javaparser.ast.jml.clauses.*
 
 import com.github.javaparser.symbolsolver.*
 
+import org.example.types.Clause
+
 data class Candidate(
     val name: String, 
     val initState: Int, 
-    val states: List<Int>, 
     val methods: List<Pair<String, org.example.types.Contract>>
 )
 
 fun findStateVariable(compUnit: CompilationUnit): List<Candidate> {
     data class MutCandidate(
         val initState: Int,
-        val states: MutableSet<Int>,
         val methodDecls: MutableSet<MethodDeclaration>
     )
 
@@ -39,10 +39,8 @@ fun findStateVariable(compUnit: CompilationUnit): List<Candidate> {
             val decl = jmlDecl.getDecl()
 
             // TODO add models
-            var isGhost = false
-            for (modifier in decl.getModifiers()) {
-                isGhost = isGhost
-                    || (modifier.getKeyword() == Modifier.DefaultKeyword.JML_GHOST)
+            val isGhost = decl.getModifiers().any {
+                it.getKeyword() == Modifier.DefaultKeyword.JML_GHOST
             }
             if (!isGhost) return
 
@@ -64,7 +62,6 @@ fun findStateVariable(compUnit: CompilationUnit): List<Candidate> {
                     name,
                     MutCandidate(
                         initVal,
-                        mutableSetOf(initVal),
                         mutableSetOf<MethodDeclaration>())
                 )
             }
@@ -72,7 +69,7 @@ fun findStateVariable(compUnit: CompilationUnit): List<Candidate> {
     }
     ghostFinder.visit(compUnit, Unit)
 
-    val compChecker = object : VoidVisitorAdapter<Unit>() {
+    val candidateChecker = object : VoidVisitorAdapter<Unit>() {
         override fun visit(expr: BinaryExpr, arg: Unit): Unit {
             val op = expr.getOperator()
             fun doTheThing(a: Expression, b: Expression): Boolean {
@@ -109,10 +106,7 @@ fun findStateVariable(compUnit: CompilationUnit): List<Candidate> {
                 val methodDecl = a.getParentNodeOfType(MethodDeclaration::class.java).orElse(null)
                 if (methodDecl == null) return false // shouldn't happen if above passed
 
-                val value = b.asNumber() as Int // dangerous???
-
                 candidate.methodDecls.add(methodDecl)
-                candidate.states.add(value)
                 return true
             }
             val left = expr.getLeft()
@@ -122,18 +116,22 @@ fun findStateVariable(compUnit: CompilationUnit): List<Candidate> {
             doTheThing(right, left)
         }
     }
-    compChecker.visit(compUnit, Unit)
+    candidateChecker.visit(compUnit, Unit)
 
     val result = candidates
-        .filterValues { (_, states, _) -> states.size > 1 }
+        .filterValues { (_, methodDecls) -> methodDecls.size > 1 }
         .map { (name, mutCandidate) ->
-            val (initVal, states, methodDecls) = mutCandidate
+            val (initVal, methodDecls) = mutCandidate
             val methods = methodDecls.map {
-                val name = it.getName().asString()
-                val contract = contractFromMethod(it)
-                Pair(name, contract)
+                val mname = it.getName().asString()
+
+                val jmlContract = it.getContracts().first()
+                check(jmlContract.getBehavior() in arrayOf(Behavior.NONE, Behavior.NORMAL))
+                val contract = extractContract(jmlContract)
+
+                Pair(mname, contract)
             }
-            Candidate(name, initVal, states.toList(), methods)
+            Candidate(name, initVal, methods)
         }
 
     println(result)
@@ -141,46 +139,29 @@ fun findStateVariable(compUnit: CompilationUnit): List<Candidate> {
     return result
 }
 
-private fun contractFromMethod(methodDecl: MethodDeclaration): List<org.example.types.Clause> {
-    val clauses = methodDecl.getContracts()
-        .filter {
-            val b = it.getBehavior()
-            b == Behavior.NONE || b == Behavior.NORMAL
+private fun extractContract(contract: JmlContract): List<Clause> =
+    contract.getClauses()
+        .filterIsInstance<JmlSimpleExprClause>()
+        .mapNotNull {
+            when (it.kind) {
+                JmlClauseKind.REQUIRES -> Pair(
+                    org.example.types.ClauseKind.REQUIRES,
+                    it.getExpression()
+                )
+                JmlClauseKind.ENSURES -> Pair(
+                    org.example.types.ClauseKind.ENSURES,
+                    it.getExpression()
+                )
+                else -> null
+            }
         }
-        .map {
-            it.getClauses()
-                .filterIsInstance<JmlSimpleExprClause>()
-                .map {
-                    when (it.kind) {
-                        JmlClauseKind.REQUIRES -> Pair(
-                            org.example.types.ClauseKind.REQUIRES,
-                            it.getExpression()
-                        )
-                        JmlClauseKind.ENSURES -> Pair(
-                            org.example.types.ClauseKind.ENSURES,
-                            it.getExpression()
-                        )
-                        else -> null
-                    }
-                }
-                .filterNotNull()
-                .map { (kind, expr) ->
-                    org.example.types.Clause(
-                        kind,
-                        exprFromJmlParserExpression(expr)
-                    )
-                }
-        }
-    // TODO a method may have mutliple contracts
-    if (clauses.size != 1) error("we require that only one contract exists, for now")
-    return clauses.first()
-}
+        .map { (kind, expr) -> Clause( kind, extractExpr(expr)) }
 
-private fun exprFromJmlParserExpression(e: Expression): org.example.types.Expr = when (e) {
+private fun extractExpr(e: Expression): org.example.types.Expr = when (e) {
     is BinaryExpr -> org.example.types.BinExpr(
         e.getOperator(),
-        exprFromJmlParserExpression(e.getLeft()),
-        exprFromJmlParserExpression(e.getRight())
+        extractExpr(e.getLeft()),
+        extractExpr(e.getRight())
     )
     is NameExpr -> org.example.types.Variable(e.getName().asString())
     is IntegerLiteralExpr -> org.example.types.Value(e.asNumber() as Int)
