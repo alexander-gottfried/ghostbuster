@@ -18,12 +18,22 @@ import com.github.javaparser.ast.jml.clauses.*
 
 import com.github.javaparser.symbolsolver.*
 
-import org.example.types.Clause
+import org.example.types.Expr as MyExpr
+import org.example.types.BoolExpr as MyBoolExpr
+import org.example.types.Contract as MyContract
+import org.example.types.*
+
+data class StateVar(val name: String, val oldName: String, val values: List<Int>) {
+    companion object {
+        fun make(name: String, values: List<Int>)
+            = StateVar(name, "__OLD_" + name, values)
+    }
+}
 
 data class Candidate(
-    val name: String, 
+    val name: StateVar,
     val initState: Int, 
-    val methods: List<Pair<String, org.example.types.Contract>>
+    val methods: List<Pair<String, MyContract>>
 )
 
 fun findStateVariable(compUnit: CompilationUnit): List<Candidate> {
@@ -122,19 +132,29 @@ fun findStateVariable(compUnit: CompilationUnit): List<Candidate> {
         .filterValues { (_, methodDecls) -> methodDecls.size > 1 }
         .map { (name, mutCandidate) ->
             val (initVal, methodDecls) = mutCandidate
+            val values = mutableSetOf<Int>()
             val methods = methodDecls.map {
                 val mname = it.getName().asString()
 
                 val jmlContract = it.getContracts().first()
                 check(jmlContract.getBehavior() in arrayOf(Behavior.NONE, Behavior.NORMAL))
-                val contract = extractContract(jmlContract)
+                val clauses = extractContract(jmlContract)
 
-                Pair(mname, contract)
+                val precond = clauses.filter { it.kind == ClauseKind.REQUIRES }
+                    .map(Clause::expr)
+                    .reduce { a, b -> MyBoolExpr.BinOp(BoolOp.AND, a, b) }
+                val postcond = clauses.filter { it.kind == ClauseKind.ENSURES }
+                    .map(Clause::expr)
+                    .reduce { a, b -> MyBoolExpr.BinOp(BoolOp.AND, a, b) }
+
+                collectValuesInto(precond, name, values)
+                collectValuesInto(postcond, name, values)
+
+                Pair(mname, MyContract(precond, postcond))
             }
-            Candidate(name, initVal, methods)
+            println(values)
+            Candidate(StateVar.make(name, values.toList()), initVal, methods)
         }
-
-    println(result)
 
     return result
 }
@@ -155,16 +175,79 @@ private fun extractContract(contract: JmlContract): List<Clause> =
                 else -> null
             }
         }
-        .map { (kind, expr) -> Clause( kind, extractExpr(expr)) }
+        .map { (kind, expr) -> Clause( kind, extractBoolExpr(expr)) }
 
-private fun extractExpr(e: Expression): org.example.types.Expr = when (e) {
-    is BinaryExpr -> org.example.types.BinExpr(
-        e.getOperator(),
+private fun extractBoolExpr(e: Expression): MyBoolExpr = when (e) {
+    is BooleanLiteralExpr -> MyBoolExpr.Lit(e.getValue())
+    is UnaryExpr if e.getOperator() == UnaryExpr.Operator.LOGICAL_COMPLEMENT -> {
+        MyBoolExpr.Not(extractBoolExpr(e.getExpression()))
+    }
+    is BinaryExpr -> extractBinaryExpr(e)
+    else -> error("")
+}
+
+private fun extractBinaryExpr(e: BinaryExpr): MyBoolExpr {
+    val exop = e.getOperator()
+
+    val op1 = myBoolOp(exop)
+    if (op1 != null) {
+        return MyBoolExpr.BinOp(
+            op1,
+            extractBoolExpr(e.getLeft()),
+            extractBoolExpr(e.getRight())
+        )
+    }
+
+    val op2 = myArithCompOp(exop)
+    if (op2 != null) {
+        return MyBoolExpr.ArithComp(
+            op2,
+            extractExpr(e.getLeft()),
+            extractExpr(e.getRight())
+        )
+    }
+
+    error("other ops not supported here")
+}
+
+private fun myBoolOp(op: BinaryExpr.Operator): BoolOp? = when (op) {
+    BinaryExpr.Operator.IMPLICATION -> BoolOp.IMPLY
+    BinaryExpr.Operator.RIMPLICATION -> BoolOp.RIMPLY
+    BinaryExpr.Operator.EQUIVALENCE -> BoolOp.EQUIV
+    BinaryExpr.Operator.ANTIVALENCE -> BoolOp.NEQUIV
+    BinaryExpr.Operator.OR -> BoolOp.OR
+    BinaryExpr.Operator.AND -> BoolOp.AND
+    BinaryExpr.Operator.XOR -> BoolOp.XOR
+    else -> null
+}
+
+private fun myArithCompOp(op: BinaryExpr.Operator): ArithCompOp? = when (op) {
+    BinaryExpr.Operator.EQUALS -> ArithCompOp.EQ
+    BinaryExpr.Operator.NOT_EQUALS -> ArithCompOp.NEQ
+    BinaryExpr.Operator.LESS_EQUALS -> ArithCompOp.LE
+    BinaryExpr.Operator.GREATER_EQUALS -> ArithCompOp.GE
+    BinaryExpr.Operator.LESS -> ArithCompOp.LT
+    BinaryExpr.Operator.GREATER -> ArithCompOp.GT
+    else -> null
+}
+
+private fun myArithOp(op: BinaryExpr.Operator): ArithOp = when (op) {
+    BinaryExpr.Operator.PLUS -> ArithOp.PLUS
+    BinaryExpr.Operator.MINUS -> ArithOp.MINUS
+    BinaryExpr.Operator.DIVIDE -> ArithOp.DIVIDE
+    BinaryExpr.Operator.MULTIPLY -> ArithOp.MULTIPLY
+    BinaryExpr.Operator.REMAINDER -> ArithOp.MODULO
+    else -> error("")
+}
+
+private fun extractExpr(e: Expression): MyExpr = when (e) {
+    is BinaryExpr -> MyExpr.ArithExpr(
+        myArithOp(e.getOperator()),
         extractExpr(e.getLeft()),
         extractExpr(e.getRight())
     )
-    is NameExpr -> org.example.types.Variable(e.getName().asString())
-    is IntegerLiteralExpr -> org.example.types.Value(e.asNumber() as Int)
+    is NameExpr -> MyExpr.Variable(e.getName().asString())
+    is IntegerLiteralExpr -> MyExpr.Value(e.asNumber() as Int)
     is MethodCallExpr -> {
         val callName = e.getName().asString()
         val callArgs = e.getArguments()
@@ -173,7 +256,7 @@ private fun extractExpr(e: Expression): org.example.types.Expr = when (e) {
         val arg = callArgs.first()
         check(arg is NameExpr)
 
-        org.example.types.Old(arg.getName().asString())
+        MyExpr.Old(arg.getName().asString())
     }
     else -> error("TODO we don't do other expressions yet")
 }
