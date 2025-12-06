@@ -32,6 +32,7 @@ dependencies {
     implementation(libs.guava)
 
 	implementation("com.github.jmltoolkit.jmlparser:jmlparser-core:master")
+	implementation("com.github.jmltoolkit.jmlparser:jmlparser-symbol-solver-core:master")
 }
 
 // Apply a specific Java toolchain to ease working on different environments.

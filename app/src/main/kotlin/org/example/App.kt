@@ -9,5 +9,7 @@ fun main(args: Array<String>) {
     }
 
     val file = File(args.get(0))
-    parse(file)
+    val compunit = parse(file)
+
+    findStateVariable(compunit)
 }
