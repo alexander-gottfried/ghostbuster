@@ -9,6 +9,9 @@ plugins {
     // Apply the org.jetbrains.kotlin.jvm Plugin to add support for Kotlin.
     alias(libs.plugins.kotlin.jvm)
 
+    // z3
+    //id("io.github.rascmatt.z3") version "1.0.2"
+
     // Apply the application plugin to add support for building a CLI application in Java.
     application
 }
@@ -33,6 +36,7 @@ dependencies {
 
 	implementation("com.github.jmltoolkit.jmlparser:jmlparser-core:master")
 	implementation("com.github.jmltoolkit.jmlparser:jmlparser-symbol-solver-core:master")
+    implementation("tools.aqua:z3-turnkey:4.14.1")
 }
 
 // Apply a specific Java toolchain to ease working on different environments.

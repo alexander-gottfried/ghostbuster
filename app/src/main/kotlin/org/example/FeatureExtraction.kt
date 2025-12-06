@@ -22,7 +22,7 @@ data class Candidate(
     val name: String, 
     val initState: Int, 
     val states: List<Int>, 
-    val methods: List<Pair<String, Contract>>
+    val methods: List<Pair<String, org.example.types.Contract>>
 )
 
 fun findStateVariable(compUnit: CompilationUnit): List<Candidate> {
@@ -79,8 +79,8 @@ fun findStateVariable(compUnit: CompilationUnit): List<Candidate> {
                 // a should refer to a variable and be a candidate
                 if (a !is NameExpr) return false
                 val name = a.getName().asString()
-                val candidate = candidates.get(name)
 
+                val candidate = candidates.get(name)
                 // name not a candidate
                 if (candidate == null) return false
 
@@ -130,7 +130,7 @@ fun findStateVariable(compUnit: CompilationUnit): List<Candidate> {
             val (initVal, states, methodDecls) = mutCandidate
             val methods = methodDecls.map {
                 val name = it.getName().asString()
-                val contract = Contract() // TODO
+                val contract = contractFromMethod(it)
                 Pair(name, contract)
             }
             Candidate(name, initVal, states.toList(), methods)
@@ -139,4 +139,60 @@ fun findStateVariable(compUnit: CompilationUnit): List<Candidate> {
     println(result)
 
     return result
+}
+
+private fun contractFromMethod(methodDecl: MethodDeclaration): List<org.example.types.Clause> {
+    val clauses = methodDecl.getContracts()
+        .filter {
+            val b = it.getBehavior()
+            b == Behavior.NONE || b == Behavior.NORMAL
+        }
+        .map {
+            it.getClauses()
+                .filterIsInstance<JmlSimpleExprClause>()
+                .map {
+                    when (it.kind) {
+                        JmlClauseKind.REQUIRES -> Pair(
+                            org.example.types.ClauseKind.REQUIRES,
+                            it.getExpression()
+                        )
+                        JmlClauseKind.ENSURES -> Pair(
+                            org.example.types.ClauseKind.ENSURES,
+                            it.getExpression()
+                        )
+                        else -> null
+                    }
+                }
+                .filterNotNull()
+                .map { (kind, expr) ->
+                    org.example.types.Clause(
+                        kind,
+                        exprFromJmlParserExpression(expr)
+                    )
+                }
+        }
+    // TODO a method may have mutliple contracts
+    if (clauses.size != 1) error("we require that only one contract exists, for now")
+    return clauses.first()
+}
+
+private fun exprFromJmlParserExpression(e: Expression): org.example.types.Expr = when (e) {
+    is BinaryExpr -> org.example.types.BinExpr(
+        e.getOperator(),
+        exprFromJmlParserExpression(e.getLeft()),
+        exprFromJmlParserExpression(e.getRight())
+    )
+    is NameExpr -> org.example.types.Variable(e.getName().asString())
+    is IntegerLiteralExpr -> org.example.types.Value(e.asNumber() as Int)
+    is MethodCallExpr -> {
+        val callName = e.getName().asString()
+        val callArgs = e.getArguments()
+        check(callName == "\\old" && callArgs.size == 1)
+
+        val arg = callArgs.first()
+        check(arg is NameExpr)
+
+        org.example.types.Old(arg.getName().asString())
+    }
+    else -> error("TODO we don't do other expressions yet")
 }
