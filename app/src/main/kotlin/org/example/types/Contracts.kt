@@ -1,8 +1,5 @@
 package org.example.types
 
-import com.github.javaparser.ast.expr.BinaryExpr
-typealias Operator = BinaryExpr.Operator
-
 enum class ArithCompOp {
     EQ, NEQ, LE, GE, LT, GT,
 }
@@ -61,3 +58,5 @@ enum class ClauseKind { REQUIRES, ENSURES }
 data class Clause(val kind: ClauseKind, val expr: BoolExpr) 
 //typealias Contract = List<Clause>
 data class Contract(val precond: BoolExpr, val postcond: BoolExpr)
+
+

@@ -1,31 +1,35 @@
 package org.example
 
+import com.microsoft.z3.Expr as Z3Expr
+import com.microsoft.z3.ArithExpr as Z3ArithExpr
+import com.microsoft.z3.BoolExpr as Z3BoolExpr
 import com.microsoft.z3.*
 
-import org.example.types.Expr as MyExpr
-import org.example.types.BoolExpr as MyBoolExpr
-import org.example.types.*
-
-fun possibleTransitions(stateVar: StateVar, contract: Contract): List<Pair<Int, Int>> {
-    val expr = MyBoolExpr.BinOp(BoolOp.AND, makeOld(contract.precond), contract.postcond)
+fun possibleTransitions(
+    name: String,
+    oldName: String,
+    values: List<Int>,
+    precondition: BoolExpr,
+    postcondition: BoolExpr
+): List<Pair<Int, Int>> {
+    val expr = BinOp(BoolOp.AND, makeOld(precondition), postcondition)
 
     val ctx = Context()
     val solver = ctx.mkSolver()
 
     val z3Expr = toZ3Expr(ctx, expr)
 
-    val newTerm = ctx.mkIntConst(stateVar.name)
-    val oldTerm = ctx.mkIntConst(stateVar.oldName)
+    val newTerm = ctx.mkIntConst(name)
+    val oldTerm = ctx.mkIntConst(oldName)
     val stateVarTerms = arrayOf(newTerm, oldTerm)
 
-    val possibleStates = stateVarTerms
-        .map { state ->
-            stateVar.values.map { value ->
-                ctx.mkEq(state, ctx.mkInt(value))
-            }
-            .reduce { a, b -> ctx.mkOr(a, b) }
+    val possibleStates = stateVarTerms.map { state ->
+        values.map { value ->
+            ctx.mkEq(state, ctx.mkInt(value))
         }
-        .reduce { a, b -> ctx.mkAnd(a, b) }
+        .reduce { a, b -> ctx.mkOr(a, b) }
+    }
+    .reduce { a, b -> ctx.mkAnd(a, b) }
 
 
     solver.add(z3Expr)
@@ -58,7 +62,8 @@ fun possibleTransitions(stateVar: StateVar, contract: Contract): List<Pair<Int, 
     return transitions.toList()
 }
 
-private fun oneTransition(stateVar: StateVar, model: Model): Pair<Int, Int> {
+/*
+private fun oneTransition(name: String, oldName: String, model: Model): Pair<Int, Int> {
     val mappings = model.getConstDecls()
         .map {
             val interp = model.getConstInterp(it)
@@ -68,14 +73,15 @@ private fun oneTransition(stateVar: StateVar, model: Model): Pair<Int, Int> {
         }
 
     val oldmap = mappings
-        .first { (name, _) -> name.equals(stateVar.oldName) }!!
+        .first { (name, _) -> name.equals(oldName) }!!
         .component2()
     val newmap = mappings
-        .first { (name, _) -> name.equals(stateVar.name) }!!
+        .first { (name, _) -> name.equals(name) }!!
         .component2()
 
     return TODO()
 }
+*/
 
 private fun blockModel(ctx: Context, solver: Solver, terms: Array<IntExpr>): Unit {
     val model = solver.getModel()
@@ -85,28 +91,28 @@ private fun blockModel(ctx: Context, solver: Solver, terms: Array<IntExpr>): Uni
     solver.add(blockingTerm)
 }
 
-private fun makeOld(e: MyBoolExpr): MyBoolExpr = when (e) {
-    is MyBoolExpr.Not -> MyBoolExpr.Not(makeOld(e.expr))
-    is MyBoolExpr.BinOp -> MyBoolExpr.BinOp(e.op, makeOld(e.lhs), makeOld(e.rhs))
-    is MyBoolExpr.ArithComp -> MyBoolExpr.ArithComp(e.op, makeOld(e.lhs), makeOld(e.rhs))
+private fun makeOld(e: BoolExpr): BoolExpr = when (e) {
+    is Not -> Not(makeOld(e.expr))
+    is BinOp -> BinOp(e.op, makeOld(e.lhs), makeOld(e.rhs))
+    is ArithComp -> ArithComp(e.op, makeOld(e.lhs), makeOld(e.rhs))
     else -> e
 }
 
-private fun makeOld(expr: MyExpr): MyExpr = when (expr) {
-    is MyExpr.Old -> error("expected a precondition")
-    is MyExpr.Variable -> MyExpr.Old(expr.name)
-    is MyExpr.ArithExpr -> MyExpr.ArithExpr(expr.op, makeOld(expr.lhs), makeOld(expr.rhs))
+private fun makeOld(expr: Expr): Expr = when (expr) {
+    is Old -> error("expected a precondition")
+    is Variable -> Old(expr.name)
+    is ArithExpr -> ArithExpr(expr.op, makeOld(expr.lhs), makeOld(expr.rhs))
     else -> expr
 }
 
-private fun toZ3Expr(ctx: Context, e: MyBoolExpr): BoolExpr = when (e) {
-    is MyBoolExpr.Lit -> ctx.mkBool(e.value)
-    is MyBoolExpr.Not -> ctx.mkNot(toZ3Expr(ctx, e.expr))
-    is MyBoolExpr.BinOp -> {
+private fun toZ3Expr(ctx: Context, e: BoolExpr): Z3BoolExpr = when (e) {
+    is Lit -> ctx.mkBool(e.value)
+    is Not -> ctx.mkNot(toZ3Expr(ctx, e.expr))
+    is BinOp -> {
         val ctor = boolOpCtor(ctx, e.op)
         ctor(toZ3Expr(ctx, e.lhs), toZ3Expr(ctx, e.rhs))
     }
-    is MyBoolExpr.ArithComp -> {
+    is ArithComp -> {
         val ctor = arithCompCtor(ctx, e.op)
         ctor(toZ3Expr(ctx, e.lhs), toZ3Expr(ctx, e.rhs))
     }
@@ -114,17 +120,20 @@ private fun toZ3Expr(ctx: Context, e: MyBoolExpr): BoolExpr = when (e) {
 
 private fun oldname(name: String) = "__OLD_" + name
 
-private fun toZ3Expr(ctx: Context, e: MyExpr): ArithExpr<IntSort> = when (e) {
-    is MyExpr.Old -> ctx.mkIntConst(oldname(e.name))
-    is MyExpr.Variable -> ctx.mkIntConst(e.name)
-    is MyExpr.Value -> ctx.mkInt(e.value)
-    is MyExpr.ArithExpr -> {
+private fun toZ3Expr(ctx: Context, e: Expr): Z3ArithExpr<IntSort> = when (e) {
+    is Old -> ctx.mkIntConst(oldname(e.name))
+    is Variable -> ctx.mkIntConst(e.name)
+    is Value -> ctx.mkInt(e.value)
+    is ArithExpr -> {
         val ctor = arithOpCtor(ctx, e.op)
         ctor(toZ3Expr(ctx, e.lhs), toZ3Expr(ctx, e.rhs))
     }
 }
 
-private fun boolOpCtor(ctx: Context, op: BoolOp): (BoolExpr, BoolExpr) -> BoolExpr = when (op) {
+private fun boolOpCtor(
+    ctx: Context,
+    op: BoolOp
+): (Z3BoolExpr, Z3BoolExpr) -> Z3BoolExpr = when (op) {
     BoolOp.IMPLY -> { a, b -> ctx.mkImplies(a, b) }
     BoolOp.RIMPLY -> { a, b -> ctx.mkImplies(b, a) }
     BoolOp.EQUIV -> { a, b -> ctx.mkIff(a, b) }
@@ -134,7 +143,10 @@ private fun boolOpCtor(ctx: Context, op: BoolOp): (BoolExpr, BoolExpr) -> BoolEx
     BoolOp.XOR -> { a, b -> ctx.mkXor(a, b) }
 }
 
-private fun arithOpCtor(ctx: Context, op: ArithOp): (ArithExpr<IntSort>, ArithExpr<IntSort>) -> ArithExpr<IntSort> = when (op) {
+private fun arithOpCtor(
+    ctx: Context,
+    op: ArithOp
+): (Z3ArithExpr<IntSort>, Z3ArithExpr<IntSort>) -> Z3ArithExpr<IntSort> = when (op) {
     ArithOp.PLUS -> { a, b -> ctx.mkAdd(a, b) }
     ArithOp.MINUS -> { a, b -> ctx.mkSub(a, b) }
     ArithOp.DIVIDE -> { a, b -> ctx.mkDiv(a, b) }
@@ -142,7 +154,10 @@ private fun arithOpCtor(ctx: Context, op: ArithOp): (ArithExpr<IntSort>, ArithEx
     ArithOp.MODULO -> { a, b -> ctx.mkMod(a, b) }
 }
 
-private fun arithCompCtor(ctx: Context, op: ArithCompOp): (ArithExpr<IntSort>, ArithExpr<IntSort>) -> BoolExpr = when (op) {
+private fun arithCompCtor(
+    ctx: Context,
+    op: ArithCompOp
+): (Z3ArithExpr<IntSort>, Z3ArithExpr<IntSort>) -> Z3BoolExpr = when (op) {
     ArithCompOp.EQ -> { a, b -> ctx.mkEq(a, b) }
     ArithCompOp.NEQ -> { a, b -> ctx.mkNot(ctx.mkEq(a, b)) }
     ArithCompOp.LE -> { a, b -> ctx.mkLe(a, b) }

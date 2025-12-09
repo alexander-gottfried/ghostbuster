@@ -11,21 +11,11 @@ fun main(args: Array<String>) {
     }
 
     val file = File(args.get(0))
-    val compunit = parse(file)
+    val (candidates, methods) = parse(file)
 
-    // TODO do multiple vars later, instead of `firstOrNull`
-    val result = findStateVariable(compunit).firstOrNull()
-    if (result == null) {
-        println("No suitable state variable")
-        return
-    }
+    println(candidates)
+    println(methods)
 
-    println(result)
-    
-    val stateVar = result.name
-    result.methods.forEach { (m, c) ->
-        println()
-        println(m)
-        possibleTransitions(stateVar, c)
-    }
+    val stateVariables = candidates.mapNotNull { getStateVariable(it, methods) }
+    print(stateVariables)
 }
