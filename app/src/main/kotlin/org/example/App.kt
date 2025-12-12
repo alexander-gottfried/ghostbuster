@@ -23,11 +23,22 @@ fun main(args: Array<String>) {
 
     if (stateVariables.isEmpty()) return
 
-    val sv = stateVariables.first()
+    val (_, machine) = stateVariables.first()
+
+    val mureg = gruppensAlgorithm(machine.withNewAccepting(2))
+    println(mureg)
     
-    for (k in 1..4) {
-        val fsm = StateMachine(sv.transitions, sv.values, sv.init, listOf(4))
-        println("\n$k-tail:")
-        println(fsm.tail(k))
+    /*
+    for (s in machine.values) {
+        val fsm = machine.withNewAccepting(listOf(s))
+        println(fsm.tail(1))
     }
+    val tails = machine.values.map {
+        machine.withNewAccepting(listOf(it)).tail(1)//.subsetConstruction()
+    }
+    val p = tails.joinToString("\n\n")
+    println("\ntails: $p")
+    val overlappers = indecesOfOverlappers(tails)
+    println(overlappers)
+    */
 }

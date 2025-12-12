@@ -3,17 +3,12 @@ package org.example
 data class Candidate(val name: String, val init: Int)
 data class Method(val name: String, val precond: BoolExpr, val postcond: BoolExpr)
 
-data class Transition(val from: Int, val to: Int, val method: String)
-data class StateVariable(
-    val name: String,
-    val init: Int,
-    val values: List<Int>,
-    val transitions: List<Transition>,
-)
-
 private data class MethodBoundary(val method: Method, val preb: Boundary, val postb: Boundary)
 
-fun getStateVariable(candidate: Candidate, allMethods: List<Method>): StateVariable? {
+fun getStateVariable(
+    candidate: Candidate,
+    allMethods: List<Method>
+): Pair<String, StateMachine>? {
     val name = candidate.name
 
     val boundaries = allMethods.map {
@@ -49,5 +44,14 @@ fun getStateVariable(candidate: Candidate, allMethods: List<Method>): StateVaria
         transitions.addAll(ts)
     }
 
-    return StateVariable(candidate.name, candidate.init, values, transitions.toList())
+    return Pair(
+        candidate.name,
+        StateMachine(
+            transitions.toList(),
+            values,
+            methods.map(Method::name),
+            candidate.init,
+            emptyList()
+        )
+    )
 }
