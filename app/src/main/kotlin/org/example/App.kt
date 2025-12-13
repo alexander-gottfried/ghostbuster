@@ -12,33 +12,57 @@ fun main(args: Array<String>) {
         return
     }
 
-    val file = File(args.get(0))
-    val (candidates, methods) = parse(file)
-
-    println(candidates)
-    println(methods)
-
-    val stateVariables = candidates.mapNotNull { getStateVariable(it, methods) }
-    println(stateVariables)
-
-    if (stateVariables.isEmpty()) return
-
-    val (_, machine) = stateVariables.first()
+    val (filekind, file) = parseCliOptions(args) ?: return
+    val machine = when (filekind) {
+        FileKind.JAVA -> {
+            val (candidates, methods) = parse(file)
+            val stateVariables = candidates.mapNotNull { getStateVariable(it, methods) }
+            if (stateVariables.isEmpty()) return
+            val (_, machine) = stateVariables.first()
+            machine
+        }
+        FileKind.FSM -> {
+            val machine = parseFSM(file) ?: return
+            machine
+        }
+    }
 
     val mureg = gruppensAlgorithm(machine.withNewAccepting(2))
-    println(mureg)
-    
-    /*
-    for (s in machine.values) {
-        val fsm = machine.withNewAccepting(listOf(s))
-        println(fsm.tail(1))
+    println()
+    println(mureg.asString())
+}
+
+private enum class FileKind {
+    JAVA, FSM,
+}
+
+private data class Options(val filekind: FileKind, val file: File)
+
+private enum class CliState {
+    TAKE_ANY, TAKE_FSM,
+}
+
+private fun parseCliOptions(args: Array<String>): Options? {
+    var state = CliState.TAKE_ANY
+    var filekind: FileKind? = null
+    var file: File? = null
+    for (arg in args) {
+        when (state) {
+            CliState.TAKE_ANY -> when (arg) {
+                "-fsm" -> state = CliState.TAKE_FSM
+                else -> {
+                    filekind = FileKind.JAVA
+                    file = File(arg)
+                    break
+                }
+            }
+            CliState.TAKE_FSM -> {
+                filekind = FileKind.FSM
+                file = File(arg)
+                break
+            }
+        }
     }
-    val tails = machine.values.map {
-        machine.withNewAccepting(listOf(it)).tail(1)//.subsetConstruction()
-    }
-    val p = tails.joinToString("\n\n")
-    println("\ntails: $p")
-    val overlappers = indecesOfOverlappers(tails)
-    println(overlappers)
-    */
+    if (filekind == null || file == null) return null
+    return Options(filekind, file)
 }
