@@ -29,10 +29,7 @@ fun parseFSM(file: File): StateMachine? {
                 val to = toStr.toInt() ?: return null
                 transitions.add(Transition(from, to, method))
             }
-            else -> {
-                println("line too long or short")
-                return null
-            }
+            else -> continue
         }
     }
 
@@ -47,7 +44,9 @@ fun parseFSM(file: File): StateMachine? {
         1 -> inits.first()
         else -> {
             // unique new init
-            val newInit = states.map { it + 1 }.min()
+            val newInit = states.map { it - 1 }.min()
+            println("STATES: $states")
+            println("NEW INIT: $newInit")
             transitions.addAll(
                 inits.map { Transition(newInit, it, "ε") }
             )

@@ -37,10 +37,25 @@ sealed interface Mu {
             return Mu.Concat(lhs, rhs)
         }
 
-        fun mkFixedPoint(id: Int, body: Mu) = if (body.isAtom() && body !is Mu.RecVar) {
-            body 
-        } else {
-            Mu.FixedPoint(id, body)
+        fun mkFixedPoint(id: Int, body: Mu): Mu = when (body) {
+            is Mu.One -> body
+            is Mu.Zero -> body
+            is Mu.Sym -> body
+            is Mu.RecVar if body.id != id -> body
+            is Mu.Union if body.lhs is Mu.One && body.rhs is Mu.Concat -> {
+                val concat = body.rhs
+                val isstar = (
+                    concat.lhs is Mu.Sym
+                    && concat.rhs is Mu.RecVar
+                    && concat.rhs.id == id
+                )
+                if (isstar) {
+                    Mu.mkStar(concat.lhs)
+                } else {
+                    Mu.FixedPoint(id, body)
+                }
+            }
+            else -> Mu.FixedPoint(id, body)
         }
 
         fun mkStar(expr: Mu) = when (expr) {
@@ -52,13 +67,16 @@ sealed interface Mu {
 
 fun gruppensAlgorithm(machine: StateMachine): Mu {
     val intermediates = machine.toGruppenIntermediates().toMutableMap()
+    //println("MACHINE INIT: $machine.init")
     check(machine.init in intermediates.keys)
     val states = intermediates.keys.minus(machine.init)
 
+    /*
     println("\n0:")
     intermediates.forEach { (s, e) ->
         println("$s -> ${e.asString()}")
     }
+    */
 
     for (state in states) {
         val replaceWithThis = Mu.mkFixedPoint(
@@ -71,13 +89,15 @@ fun gruppensAlgorithm(machine: StateMachine): Mu {
         // since these overlap 100%, this replaces all keyvals with replaced exprs
         intermediates.plusAssign(newIntermediates)
 
+        /*
         println("\n$state:")
         intermediates.forEach { (s, e) ->
             println("$s -> ${e.asString()}")
         }
+        */
     }
     val result = Mu.mkFixedPoint(machine.init, intermediates.get(machine.init)!!)
-    return result.rewriteRule().withoutUnusedVariables()
+    return result.withoutUnusedVariables()
 }
 
 
@@ -124,7 +144,7 @@ private fun Mu.withFreeVariableReplaced(thisOne: Int, byThis: Mu): Mu = when (th
     else -> this
 }
 
-private fun Mu.withoutUnusedVariables(): Mu = when (this) {
+fun Mu.withoutUnusedVariables(): Mu = when (this) {
     is Mu.FixedPoint if !this.body.varIsFree(this.id) -> this.body.withoutUnusedVariables()
     is Mu.FixedPoint -> Mu.mkFixedPoint(this.id, this.body.withoutUnusedVariables())
     else -> this.passOnTransform(Mu::withoutUnusedVariables)
@@ -158,16 +178,16 @@ fun Mu.asLatex(): String = when (this) {
     is Mu.One -> "1"
     is Mu.Sym -> "\\idm{${this.name}}"
     is Mu.RecVar -> "X_${this.id}"
-    is Mu.Union -> "${this.lhs.asString()} + ${this.rhs.asString()}"
+    is Mu.Union -> "${this.lhs.asLatex()} + ${this.rhs.asLatex()}"
     is Mu.Concat -> {
-        fun paren(m: Mu): String = if (m is Mu.Union) "(${m.asString()})" else m.asString()
+        fun paren(m: Mu): String = if (m is Mu.Union) "(${m.asLatex()})" else m.asLatex()
         "${paren(this.lhs)} ${paren(this.rhs)}"
     }
-    is Mu.FixedPoint -> "(\\mu X_${this.id}.${this.body.asString()})"
-    is Mu.Star -> if (this.expr.isAtom()) "${this.expr.asString()}^*" else "(${this.expr.asString()})^*"
+    is Mu.FixedPoint -> "\\fixpoint{X_${this.id}}{${this.body.asLatex()}}"
+    is Mu.Star -> if (this.expr.isAtom()) "${this.expr.asLatex()}^*" else "(${this.expr.asLatex()})^*"
 }
 
-private fun Mu.rewriteRule(): Mu {
+fun Mu.rewriteRule(): Mu {
     val skip = (
         this !is Mu.FixedPoint ||           // we look for (μX.(...)
         this.body !is Mu.Union ||           // (...) mX + ...
