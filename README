@@ -9,6 +9,8 @@ cd app
 gradle run --args="examples/Casino.java"
 ```
 
+This prints latex commands defined in `app/commands_cats.tex`.
+
 You can put in FSMs without Java code instead by passing a text file that lists all transitions,
 starting state, and accepting states,
 formatted like the text files in `examples/`.
