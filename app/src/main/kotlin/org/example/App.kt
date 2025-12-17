@@ -17,7 +17,10 @@ fun main(args: Array<String>) {
         FileKind.JAVA -> {
             val (candidates, methods) = parse(file)
             val stateVariables = candidates.mapNotNull { getStateVariable(it, methods) }
-            if (stateVariables.isEmpty()) return
+            if (stateVariables.isEmpty()) {
+                println("No FSM state variable found")
+                return
+            }
             val (_, machine) = stateVariables.first()
             machine
         }
@@ -32,17 +35,22 @@ fun main(args: Array<String>) {
             val gs = machine.withNewAccepting(state)
             val mureg = gruppensAlgorithm(gs)
             val simplified = mureg.rewriteRule().withoutUnusedVariables()
-            //println()
-            //println(mureg.asLatex())
-            println("\n$state:")
+            println("\nμ-regex for G($state):")
             println(simplified.asLatex())
+
+            val cat = simplified.toCat()
+            println("\ntrace formula for G($state):")
+            println(cat.asLatex())
         }
     } else {
         check(machine.accepting.isNotEmpty())
         val mureg = gruppensAlgorithm(machine)
         val simplified = mureg.rewriteRule().withoutUnusedVariables()
-        println("Result:")
+        println("As μ-regex:")
         println(simplified.asLatex())
+        val cat = simplified.toCat()
+        println("\nAs Trace Formula:")
+        println(cat.asLatex())
     }
 }
 

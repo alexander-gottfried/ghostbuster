@@ -1,0 +1,45 @@
+%abstract traces
+\newcommand{\noEvent}[1]{\stackrel{#1}{\ensuremath{\cdot\cdot}}}
+\newcommand{\anyEvent}[0]{\ensuremath\noEvent{}\xspace}
+%chop
+\newcommand{\chop}{\ensuremath{*\!*}\xspace}
+%concat
+\newcommand{\concat}{\ensuremath\cdot}
+%mu formula
+\newcommand{\muFml}[2]{\ensuremath{\mu#1.#2}}
+%state formula
+\newcommand{\stateFml}[1]{\lceil#1\rceil}
+%events
+\newcommand{\pushEv}{\ensuremath{\mathsf{push}}\xspace}
+\newcommand{\popEv}{\ensuremath{\mathsf{pop}}\xspace}
+\newcommand{\callEv}{\ensuremath{\mathsf{call}}\xspace}
+\newcommand{\retEv}{\ensuremath{\mathsf{ret}}\xspace}
+\newcommand{\startEv}{\ensuremath{\mathsf{start}}\xspace}
+\newcommand{\finishEv}{\ensuremath{\mathsf{finish}}\xspace}
+\newcommand{\invocEv}{\ensuremath{\mathsf{invoc}}\xspace}
+\newcommand{\invocREv}{\ensuremath{\mathsf{invocR}}\xspace}
+\newcommand{\semchop}{\ensuremath{*\!*}\xspace}
+
+% TODO figure out what \xasync is
+\newcommand{\xasync}[1]{#1}
+
+%observations
+\newcommand{\obs}[2]{\mho\, \xasync{#1}~\mathbf{as}~#2}
+\newcommand{\as}[2]{\xasync{#1}~\mathbf{as}~#2}
+\newcommand{\asMany}[2]{\overline{\xasync{#1}}~\mathbf{as}~\overline{#2}}
+\newcommand{\obsP}[3]{\mho\, \xasync{#1}~\mathbf{as}~#2.\stateFml{#3}}
+\newcommand{\obsPMany}[2]{\mho\, \overline{\xasync{#1}}~\mathbf{as}~\overline{#2}.}
+\newcommand{\obsPManyL}[2]{\mho\, \overline{#1}~\mathbf{as}~\overline{#2}.}
+
+%cats
+\newcommand{\assume}[1]{\ensuremath{<\hspace{-5pt}<\!#1}}
+\newcommand{\continue}[1]{\ensuremath{#1\!>\hspace{-5pt}>}}
+\newcommand{\CAT}[3]{\ensuremath{\assume{#1} \ | \ #2 \ | \ \continue{#3}}}
+\newcommand{\CATMulti}[3]{\begin{align*}\ensuremath{&\assume{#1} \ | \\  &#2 \ | \\ &\continue{#3}\end{align*}}}
+\newcommand{\CATShort}[3]{\ensuremath{\assume{#1} \big|\big. #2 \big|\big. \continue{#3}}}
+
+%misc
+\newcommand{\idm}[1]{\ensuremath \mathsf{#1}\xspace}
+\newcommand{\fixpoint}[2]{\ensuremath(\mu#1.#2)}
+\newcommand{\nomfsm}[0]{\noEvent{\mfsm}}
+\newcommand{\nomfsmExcept}[1]{\noEvent{\mfsm\setminus\{#1\}}}

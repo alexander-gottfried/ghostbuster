@@ -46,10 +46,6 @@ fun parse(file: File): Pair<List<Candidate>, List<Method>> {
 // 2) NameExprs that refer to ghosts don't resolve to a declaration.
 // So the objectively correct approach just doesn't work for JML.
 
-    // TODO remove
-    val printer = YamlPrinter(true)
-    //println(printer.output(compilationUnit))
-
     val candidates = mutableSetOf<Candidate>()
     val methods = mutableListOf<Method>()
 

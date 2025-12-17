@@ -1,0 +1,26 @@
+# How to run
+
+This will parse `examples/Casino.java`, find the FSM state variable, find its FSM `G(F)`
+parametrized with accepting states `F`, and then translate `G(s)` for each FSM state `s` to
+μ-regular expressions and trace formulas:
+
+```
+cd app
+gradle run --args="examples/Casino.java"
+```
+
+You can put in FSMs without Java code instead by passing a text file that lists all transitions,
+starting state, and accepting states,
+formatted like the text files in `examples/`.
+
+```
+gradle run --args="-fsm examples/csa4.txt"
+```
+
+(Text files `csa*.txt` are the suffix FSMs from the case study.)
+
+If you want to print all `G(s)`, like in the Java example above, enter instead:
+
+```
+gradle run --args="-all -fsm <textfile>"
+```

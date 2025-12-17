@@ -1,0 +1,12 @@
+a 3
+s 1
+s 6
+s 4
+s 5
+1 Admit 2
+6 Preempt 2
+2 Suspend 3
+3 Resume 2
+5 Unblock 3
+4 Unblock 2
+4 Suspend 5

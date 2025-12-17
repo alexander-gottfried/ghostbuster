@@ -1,0 +1,3 @@
+s 6
+a 7
+6 Terminate 7
